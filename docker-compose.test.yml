@@ -1,0 +1,48 @@
+# Remove the version line if you want (optional)
+# version: '3.8'
+
+services:
+  testdb:
+    image: postgres:16
+    container_name: test_db
+    env_file:
+      - .env.test
+    ports:
+      - "${TEST_DB_PORT:-5433}:5432"
+    volumes:
+      - test_data:/var/lib/postgresql/data
+    networks:
+      - test_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend_test:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: backend_test
+    container_name: backend_test
+    depends_on:
+      testdb:
+        condition: service_healthy
+    env_file:
+      - .env.test
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      ENV_FILE: .env.test
+    command: /bin/bash -c "/backend/pre-start.sh && pytest --junitxml=report.xml -v"
+    networks:
+      - test_network
+    volumes:
+      - ./backend:/backend
+
+volumes:
+  test_data:
+
+
+networks:
+  test_network:
+    driver: bridge
